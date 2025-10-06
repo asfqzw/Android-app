@@ -31,7 +31,14 @@ class SmartHomeActivity : AppCompatActivity() {
     private val activeDatabaseListeners = mutableListOf<Pair<DatabaseReference, ValueEventListener>>()
 
     companion object {
+        // Change this if your database uses a different root path
+        // Example: "users/{uid}/home1/sensors" or "apps/safesmarthome/sensors"
         private const val DB_ROOT_SENSORS = "sensors"
+
+        // Change these to match the exact sensor keys in your database
+        private const val SENSOR_FIRE_KEY = "fire"
+        private const val SENSOR_SMOKE_KEY = "smoke"
+        private const val SENSOR_GAS_KEY = "gas"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -112,6 +119,8 @@ class SmartHomeActivity : AppCompatActivity() {
 
 
         // 🏠 Initialize all rooms
+        // IMPORTANT: Change the map keys (e.g., "Living", "Dining") to match
+        // the room names used in your database under $DB_ROOT_SENSORS.
         rooms["Living"] = Room(
             lightSwitch = findViewById(R.id.switchlivingLight),
             fanSwitch = findViewById(R.id.switchlivingFan),
@@ -145,11 +154,14 @@ class SmartHomeActivity : AppCompatActivity() {
         )
 
         // Firebase Realtime Database subscription for sensor values
+        // If you use a non-default instance, pass your DB URL:
+        // database = FirebaseDatabase.getInstance("https://your-db-id.europe-west1.firebasedatabase.app")
         database = FirebaseDatabase.getInstance()
         rooms.forEach { (roomName, room) ->
-            room.fire?.let { subscribeToSensorValue(roomName, "fire", it) }
-            room.smoke?.let { subscribeToSensorValue(roomName, "smoke", it) }
-            room.gas?.let { subscribeToSensorValue(roomName, "gas", it) }
+            // Change SENSOR_* constants above if your keys differ
+            room.fire?.let { subscribeToSensorValue(roomName, SENSOR_FIRE_KEY, it) }
+            room.smoke?.let { subscribeToSensorValue(roomName, SENSOR_SMOKE_KEY, it) }
+            room.gas?.let { subscribeToSensorValue(roomName, SENSOR_GAS_KEY, it) }
         }
 
         // 🔌 Set listeners
@@ -169,6 +181,7 @@ class SmartHomeActivity : AppCompatActivity() {
         sensorKey: String,
         targetView: TextView
     ) {
+        // Reads from: sensors/{roomName}/{sensorKey} (or your adjusted path)
         val referencePath = "$DB_ROOT_SENSORS/$roomName/$sensorKey"
         val reference = database.getReference(referencePath)
         val listener = object : ValueEventListener {
