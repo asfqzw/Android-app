@@ -10,6 +10,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.isVisible
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 
 class SmartHomeActivity : AppCompatActivity() {
 
@@ -22,6 +27,12 @@ class SmartHomeActivity : AppCompatActivity() {
     )
 
     private val rooms = mutableMapOf<String, Room>()
+    private lateinit var database: FirebaseDatabase
+    private val activeDatabaseListeners = mutableListOf<Pair<DatabaseReference, ValueEventListener>>()
+
+    companion object {
+        private const val DB_ROOT_SENSORS = "sensors"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -133,6 +144,14 @@ class SmartHomeActivity : AppCompatActivity() {
             gas = findViewById(R.id.kitchenGas)
         )
 
+        // Firebase Realtime Database subscription for sensor values
+        database = FirebaseDatabase.getInstance()
+        rooms.forEach { (roomName, room) ->
+            room.fire?.let { subscribeToSensorValue(roomName, "fire", it) }
+            room.smoke?.let { subscribeToSensorValue(roomName, "smoke", it) }
+            room.gas?.let { subscribeToSensorValue(roomName, "gas", it) }
+        }
+
         // 🔌 Set listeners
         rooms.forEach { (_, room) ->
             room.lightSwitch.setOnCheckedChangeListener { _, _ ->
@@ -143,6 +162,41 @@ class SmartHomeActivity : AppCompatActivity() {
                 // TODO: Fan control
             }
         }
+    }
+
+    private fun subscribeToSensorValue(
+        roomName: String,
+        sensorKey: String,
+        targetView: TextView
+    ) {
+        val referencePath = "$DB_ROOT_SENSORS/$roomName/$sensorKey"
+        val reference = database.getReference(referencePath)
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val stringValue: String? = when {
+                    snapshot.getValue(String::class.java) != null -> snapshot.getValue(String::class.java)
+                    snapshot.getValue(Boolean::class.java) != null -> snapshot.getValue(Boolean::class.java)?.toString()
+                    snapshot.getValue(Number::class.java) != null -> snapshot.getValue(Number::class.java)?.toString()
+                    else -> null
+                }
+                targetView.text = stringValue ?: targetView.text
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                // Keep current text if read fails
+            }
+        }
+        reference.addValueEventListener(listener)
+        activeDatabaseListeners.add(reference to listener)
+    }
+
+    override fun onDestroy() {
+        // Detach all active database listeners to avoid leaks
+        activeDatabaseListeners.forEach { (ref, listener) ->
+            ref.removeEventListener(listener)
+        }
+        activeDatabaseListeners.clear()
+        super.onDestroy()
     }
 
     fun updateRoomValues(
